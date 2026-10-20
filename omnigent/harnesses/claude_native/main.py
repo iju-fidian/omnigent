@@ -3411,8 +3411,9 @@ def resolve_native_claude_config(
        → explicit per-family default → global ``auth:`` → ``databricks-*``
        model → ambient detection), falling back to the spec's own
        ``executor.profile`` (ucode) when it routed to legacy databricks;
-    2. when spec-less (``omnigent claude``): an explicit per-family default
-       → global ``auth:`` (→ ucode) → ambient detection;
+    2. when spec-less (``omnigent claude``) or the spec pins no auth/profile:
+       an explicit per-family default → Claude Code managed gateway settings
+       (→ ``None``) → global ``auth:`` (→ ucode) → ambient detection;
     3. otherwise ``None`` (Claude's own login).
 
     Credentials are controlled exclusively by the spec or by
@@ -3433,6 +3434,7 @@ def resolve_native_claude_config(
         resolve_bound_model,
         resolve_bound_provider,
     )
+    from omnigent.onboarding.ambient import claude_managed_gateway_routes
     from omnigent.onboarding.detected import effective_config_with_detected
     from omnigent.onboarding.provider_config import (
         default_provider_for_harness,
@@ -3475,12 +3477,21 @@ def resolve_native_claude_config(
             return ucode_config
         # The spec named no provider and no usable ucode profile — fall through to
         # the managed-connect-host broker fallback (step 4) rather than giving up.
-    else:
-        # 2. Spec-less (omnigent claude): explicit default wins first.
+    if spec is None or (
+        spec.executor.auth is None
+        and not (spec.executor.profile or spec.executor.config.get("profile"))
+    ):
+        # 2. Spec-less (omnigent claude), or a spec that pins no route: the
+        #    New Chat preview resolves spec-less, so a session must land on
+        #    the same config or its model list diverges from the preview.
         explicit = load_config()
         entry = default_provider_for_harness(explicit, "claude-sdk")
         if entry is not None:
             return _native_claude_config_from_entry(entry, refresh_models=refresh_models)
+        if claude_managed_gateway_routes(_managed_settings_paths()):
+            # Claude Code's managed settings override any env we pass, so a
+            # ucode route below would only mislabel where inference goes.
+            return None
         # A global databricks auth block → ucode.
         global_auth = _load_global_auth()
         if isinstance(global_auth, DatabricksAuth):

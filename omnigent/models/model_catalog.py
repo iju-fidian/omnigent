@@ -645,20 +645,19 @@ def _resolve_model_provider_unsafe(spec: object, harness: str | None) -> Resolve
         else _provider_from_legacy_auth(agent_spec, harness_type)
     )
     # With no launch overrides, Claude's managed settings still own routing
-    # and credentials; reporting a subscription would strip gateway model ids.
+    # and credentials — over a global ``auth:`` profile too, matching
+    # ``resolve_native_claude_config`` — and reporting a subscription would
+    # strip gateway model ids.
+    spec_pins_route = agent_spec.executor.auth is not None or bool(
+        agent_spec.executor.profile or agent_spec.executor.config.get("profile")
+    )
     if canonical_harness in ("claude-native", "native-claude") and (
-        provider.kind == SUBSCRIPTION_KIND or (entry is None and provider.kind == NONE_KIND)
+        provider.kind == SUBSCRIPTION_KIND or (entry is None and not spec_pins_route)
     ):
-        from omnigent.onboarding.ambient import claude_managed_gateway
+        from omnigent.onboarding.ambient import claude_managed_gateway_routes
 
-        base_url, has_credential = claude_managed_gateway()
-        host = (urlsplit(base_url).hostname or "").lower() if base_url else ""
-        if (
-            base_url
-            and has_credential
-            and host != "anthropic.com"
-            and not host.endswith(".anthropic.com")
-        ):
+        base_url = claude_managed_gateway_routes()
+        if base_url:
             return ResolvedModelProvider(
                 kind=CLI_CONFIG_KIND,
                 cli="claude",
