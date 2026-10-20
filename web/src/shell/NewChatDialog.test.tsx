@@ -3048,15 +3048,22 @@ describe("Run on Arca (Databricks-internal, MDM-gated)", () => {
     await waitFor(() => expect(localStorage.getItem("omnigent:last-host-choice")).toBe("arca-1"));
   });
 
-  it("hides Run on Arca while the remembered host is online, even in an older shell", async () => {
+  it("keeps Run on Arca visible in an older shell without preview recovery", async () => {
     vi.mocked(getDesktopFeatures).mockResolvedValue({ databricksInternalFeatures: true });
     localStorage.setItem("omnigent:arca-host-id", "arca-1");
     mockHosts([{ host_id: "arca-1", name: "remote-box", owner: "me", status: "online" }]);
     renderLanding();
     await openHostMenu();
 
-    expect(await screen.findByTestId("new-chat-landing-host-arca-1")).toBeTruthy();
-    expect(screen.queryByTestId("new-chat-landing-run-on-arca")).toBeNull();
+    expect(await screen.findByTestId("new-chat-landing-run-on-arca")).toHaveTextContent(
+      /^Run on Arca$/,
+    );
+    // The host row itself still lists under My machines.
+    const row = screen.getByTestId("new-chat-landing-host-arca-1");
+    expect(
+      screen.getByText("My machines").compareDocumentPosition(row) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("recaptures an already-running host through the same reconnect action", async () => {
