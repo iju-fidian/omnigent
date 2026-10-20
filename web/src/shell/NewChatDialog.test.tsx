@@ -3059,7 +3059,7 @@ describe("Run on Arca (Databricks-internal, MDM-gated)", () => {
       /^Run on Arca$/,
     );
     // The host row itself still lists under My machines.
-    const row = screen.getByTestId("new-chat-landing-host-arca-1");
+    const row = await screen.findByTestId("new-chat-landing-host-arca-1");
     expect(
       screen.getByText("My machines").compareDocumentPosition(row) &
         Node.DOCUMENT_POSITION_FOLLOWING,
