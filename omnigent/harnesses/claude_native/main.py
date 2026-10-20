@@ -3411,9 +3411,10 @@ def resolve_native_claude_config(
        → explicit per-family default → global ``auth:`` → ``databricks-*``
        model → ambient detection), falling back to the spec's own
        ``executor.profile`` (ucode) when it routed to legacy databricks;
-    2. when spec-less (``omnigent claude``) or the spec pins no auth/profile:
-       an explicit per-family default → Claude Code managed gateway settings
-       (→ ``None``) → global ``auth:`` (→ ucode) → ambient detection;
+    2. when spec-less (``omnigent claude``): an explicit per-family default
+       → Claude Code managed gateway settings (→ ``None``) → global ``auth:``
+       (→ ucode) → ambient detection. A spec that pins no auth/profile also
+       takes the managed-settings and global ``auth:`` steps after step 1;
     3. otherwise ``None`` (Claude's own login).
 
     Credentials are controlled exclusively by the spec or by
@@ -3475,15 +3476,25 @@ def resolve_native_claude_config(
         )
         if ucode_config is not None:
             return ucode_config
+        if spec.executor.auth is None and not (
+            spec.executor.profile or spec.executor.config.get("profile")
+        ):
+            # A spec that pins no route must match the spec-less New Chat
+            # preview (step 2); step 1 already applied the explicit and
+            # ambient defaults, so only these two checks differ.
+            if claude_managed_gateway_routes(_managed_settings_paths()):
+                return None
+            global_auth = _load_global_auth()
+            if isinstance(global_auth, DatabricksAuth):
+                ucode_config = _ucode_config_for_profile(
+                    global_auth.profile, refresh_models=refresh_models
+                )
+                if ucode_config is not None:
+                    return ucode_config
         # The spec named no provider and no usable ucode profile — fall through to
         # the managed-connect-host broker fallback (step 4) rather than giving up.
-    if spec is None or (
-        spec.executor.auth is None
-        and not (spec.executor.profile or spec.executor.config.get("profile"))
-    ):
-        # 2. Spec-less (omnigent claude), or a spec that pins no route: the
-        #    New Chat preview resolves spec-less, so a session must land on
-        #    the same config or its model list diverges from the preview.
+    else:
+        # 2. Spec-less (omnigent claude): explicit default wins first.
         explicit = load_config()
         entry = default_provider_for_harness(explicit, "claude-sdk")
         if entry is not None:

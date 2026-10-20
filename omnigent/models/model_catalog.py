@@ -644,10 +644,8 @@ def _resolve_model_provider_unsafe(spec: object, harness: str | None) -> Resolve
         if entry is not None
         else _provider_from_legacy_auth(agent_spec, harness_type)
     )
-    # With no launch overrides, Claude's managed settings still own routing
-    # and credentials — over a global ``auth:`` profile too, matching
-    # ``resolve_native_claude_config`` — and reporting a subscription would
-    # strip gateway model ids.
+    # Managed settings own routing over a global ``auth:`` (as in
+    # ``resolve_native_claude_config``); a subscription label would strip gateway ids.
     spec_pins_route = agent_spec.executor.auth is not None or bool(
         agent_spec.executor.profile or agent_spec.executor.config.get("profile")
     )

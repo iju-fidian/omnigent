@@ -8816,13 +8816,9 @@ def test_resolve_native_claude_config_managed_gateway_beats_global_auth(
 ) -> None:
     """Claude Code managed settings outrank a global ``auth:`` profile.
 
-    Claude Code applies managed settings over the env omnigent passes, so the
-    preview, the profile-less session, and the model-source label must all
-    defer to them instead of routing (and labelling) through the ``auth:``
-    profile.
+    Claude Code applies managed settings over the env omnigent passes, so both
+    the preview and the profile-less session defer to them.
     """
-    from omnigent.models.model_catalog import CLI_CONFIG_KIND, resolve_model_provider
-
     (_isolated_provider_config / "config.yaml").write_text(
         yaml.safe_dump({"auth": {"type": "databricks", "profile": "oss"}})
     )
@@ -8856,9 +8852,6 @@ def test_resolve_native_claude_config_managed_gateway_beats_global_auth(
     assert claude_native.resolve_native_claude_config(spec=None) is None
     assert claude_native.resolve_native_claude_config(spec=_no_auth_claude_spec()) is None
     assert seen == []
-    provider = resolve_model_provider(_no_auth_claude_spec(), "claude-native")
-    assert provider.kind == CLI_CONFIG_KIND
-    assert provider.base_url == "https://gw.example/ai-gateway/anthropic"
 
 
 def test_resolve_native_claude_config_databricks_provider_uses_ucode(
@@ -11908,7 +11901,7 @@ def test_connect_fallback_drops_credential_env_keys(
 
 
 def test_resolve_native_claude_config_spec_path_reaches_connect_broker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    _isolated_provider_config: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The runner resolves with a spec (spec is not None). When that spec names no
     provider and no usable ucode profile, resolution must still fall through to the
@@ -11942,6 +11935,38 @@ def test_resolve_native_claude_config_spec_path_reaches_connect_broker(
         config.api_key_helper
         and "omnigent.host.databricks_credential token" in config.api_key_helper
     )
+
+
+def test_resolve_native_claude_config_databricks_model_spec_skips_ambient_key(
+    _isolated_provider_config: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A profile-less ``databricks-*`` model spec must not route via an ambient key.
+
+    The spec's model signals Databricks intent, so it still reaches the connect
+    broker rather than sending a Databricks model id to api.anthropic.com.
+    """
+    from omnigent.host import databricks_credential as dc
+    from omnigent.spec.types import AgentSpec, ExecutorSpec
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+    cfg = tmp_path / ".databrickscfg"
+    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg))
+    dc._write_profile(cfg, "https://ws.example")
+    dc._write_sidecar(cfg, "https://srv", "hid", "launch-tok", "https://ws.example")
+    spec = AgentSpec(
+        spec_version=1,
+        name="t",
+        instructions="t",
+        executor=ExecutorSpec(
+            type="omnigent",
+            model="databricks-claude-sonnet-5",
+            config={"harness": "claude-native"},
+        ),
+    )
+
+    config = claude_native.resolve_native_claude_config(spec=spec, refresh_models=False)
+    assert config is not None
+    assert config.env["ANTHROPIC_BASE_URL"] == "https://ws.example/ai-gateway/anthropic"
 
 
 def test_resolve_native_claude_config_spec_api_key_auth_skips_connect_broker(

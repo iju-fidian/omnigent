@@ -37,11 +37,21 @@ import pytest
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, expect
 
+from omnigent.onboarding.ambient import claude_managed_gateway_routes
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
-pytestmark = pytest.mark.skipif(
-    os.name != "posix", reason="boots POSIX server/host daemons with a scripted claude CLI"
-)
+pytestmark = [
+    pytest.mark.skipif(
+        os.name != "posix", reason="boots POSIX server/host daemons with a scripted claude CLI"
+    ),
+    # The host subprocess reads the real managed-settings chain, which outranks
+    # the rig's global ``auth:`` block.
+    pytest.mark.skipif(
+        claude_managed_gateway_routes() is not None,
+        reason="Claude Code managed settings on this machine own Claude routing",
+    ),
+]
 
 _SERVER_HEALTH_TIMEOUT_S = 90.0
 _HOST_READY_TIMEOUT_S = 120.0
